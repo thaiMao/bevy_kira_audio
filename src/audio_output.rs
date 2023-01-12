@@ -7,8 +7,8 @@ use crate::backend_settings::AudioSettings;
 use crate::channel::dynamic::DynamicAudioChannels;
 use crate::channel::typed::AudioChannel;
 use crate::channel::{Channel, ChannelState};
-use crate::instance::AudioInstance;
-use crate::source::AudioSource;
+use crate::instance::{AudioInstance, AudioStreamingInstance};
+use crate::source::{AudioSource, AudioStreamingSource};
 use crate::PlaybackState;
 use bevy::asset::{Assets, Handle};
 use bevy::ecs::change_detection::{NonSendMut, ResMut};
@@ -27,6 +27,7 @@ use std::collections::HashMap;
 pub(crate) struct AudioOutput<B: Backend = DefaultBackend> {
     manager: Option<AudioManager<B>>,
     instances: HashMap<Channel, Vec<Handle<AudioInstance>>>,
+    streaming_instances: HashMap<Channel, Vec<Handle<AudioStreamingInstance>>>,
     channels: HashMap<Channel, ChannelState>,
 }
 
@@ -41,6 +42,7 @@ impl FromWorld for AudioOutput {
         Self {
             manager: manager.ok(),
             instances: HashMap::default(),
+            streaming_instances: HashMap::default(),
             channels: HashMap::default(),
         }
     }
@@ -330,6 +332,7 @@ impl<B: Backend> AudioOutput<B> {
 
         AudioCommandResult::Ok
     }
+
     pub(crate) fn play_channel<T: Resource>(
         &mut self,
         audio_sources: &Assets<AudioSource>,
@@ -525,6 +528,7 @@ mod test {
 
         let mut audio_output = AudioOutput {
             manager: AudioManager::new(AudioManagerSettings::<MockBackend>::default()).ok(),
+            streaming_instances: HashMap::default(),
             instances: HashMap::default(),
             channels: HashMap::default(),
         };
@@ -571,6 +575,7 @@ mod test {
         let mut audio_output = AudioOutput {
             manager: AudioManager::new(AudioManagerSettings::<MockBackend>::default()).ok(),
             instances: HashMap::default(),
+            streaming_instances: HashMap::default(),
             channels: HashMap::default(),
         };
         let audio_handle_one: Handle<AudioSource> =
