@@ -273,6 +273,63 @@ impl<B: Backend> AudioOutput<B> {
         AudioCommandResult::Ok
     }
 
+    fn play_stream(
+        &mut self,
+        channel: &Channel,
+        partial_sound_settings: &PartialSoundSettings,
+        audio_streaming_source: &AudioStreamingSource,
+        instance_handle: Handle<AudioStreamingInstance>,
+        audio_instances: &mut Assets<AudioStreamingInstance>,
+    ) -> AudioCommandResult {
+        let mut sound = audio_streaming_source.sound;
+        if let Some(channel_state) = self.channels.get(channel) {
+            channel_state.apply_stream(&mut sound);
+            // This is reverted after pausing the sound handle.
+            // Otherwise the audio thread will start playing the sound before our pause command goes through.
+            if channel_state.paused {
+                sound.settings.playback_rate = PlaybackRate::Factor(0.0);
+            }
+        }
+        partial_sound_settings.apply_stream(&mut sound);
+        let sound_handle = self.manager.as_mut().unwrap().play(sound);
+        if let Err(error) = sound_handle {
+            warn!("Failed to play sound due to {:?}", error);
+            return AudioCommandResult::Ok;
+        }
+        let mut sound_handle = sound_handle.unwrap();
+        if let Some(channel_state) = self.channels.get(channel) {
+            if channel_state.paused {
+                if let Err(error) = sound_handle.pause(kira::tween::Tween::default()) {
+                    warn!(
+                        "Failed to pause instance (channel was paused) due to {:?}",
+                        error
+                    );
+                }
+                let playback_rate = partial_sound_settings
+                    .playback_rate
+                    .unwrap_or(channel_state.playback_rate);
+                if let Err(error) =
+                    sound_handle.set_playback_rate(playback_rate, kira::tween::Tween::default())
+                {
+                    error!("Failed to set playback rate for instance: {:?}", error);
+                }
+            }
+        }
+        let instance_handle = audio_instances.set(
+            instance_handle,
+            AudioStreamingInstance {
+                handle: sound_handle,
+            },
+        );
+        if let Some(streaming_instance_states) = self.streaming_instances.get_mut(channel) {
+            streaming_instance_states.push(instance_handle);
+        } else {
+            self.streaming_instances
+                .insert(channel.clone(), vec![instance_handle]);
+        }
+
+        AudioCommandResult::Ok
+    }
     pub(crate) fn play_channel<T: Resource>(
         &mut self,
         audio_sources: &Assets<AudioSource>,
