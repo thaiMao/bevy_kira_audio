@@ -25,6 +25,16 @@ pub(crate) enum AudioCommand {
     Resume(Option<AudioTween>),
 }
 
+pub(crate) enum AudioStreamingCommand {
+    Play(PlayAudioStreamingSettings),
+    SetVolume(f64, Option<AudioTween>),
+    SetPanning(f64, Option<AudioTween>),
+    SetPlaybackRate(f64, Option<AudioTween>),
+    Stop(Option<AudioTween>),
+    Pause(Option<AudioTween>),
+    Resume(Option<AudioTween>),
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct PartialSoundSettings {
     pub(crate) loop_behavior: Option<Option<f64>>,
