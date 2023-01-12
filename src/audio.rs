@@ -2,15 +2,16 @@
 
 use crate::audio_output::{play_audio_channel, update_instance_states};
 use crate::channel::typed::AudioChannel;
-use crate::channel::AudioCommandQue;
-use crate::instance::AudioInstance;
-use crate::source::AudioSource;
+use crate::channel::{AudioCommandQue, AudioStreamingCommandQue};
+use crate::instance::{AudioInstance, AudioStreamingInstance};
+use crate::source::{AudioSource, AudioStreamingSource};
 use crate::{AudioSystemLabel, IntoSystemDescriptor};
 use bevy::app::{App, CoreStage};
 use bevy::asset::{Handle, HandleId};
 use bevy::ecs::system::Resource;
 use bevy::prelude::default;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle};
+use kira::sound::streaming::StreamingSoundData;
 use kira::LoopBehavior;
 use std::marker::PhantomData;
 use std::time::Duration;
@@ -179,9 +180,25 @@ pub struct PlayAudioSettings {
     pub(crate) settings: PartialSoundSettings,
 }
 
+pub struct PlayAudioStreamingSettings {
+    pub(crate) instance_handle: Handle<AudioStreamingInstance>,
+    pub(crate) source: Handle<AudioStreamingSource>,
+    pub(crate) settings: PartialSoundSettings,
+}
+
 impl<'a> From<&mut PlayAudioCommand<'a>> for PlayAudioSettings {
     fn from(command: &mut PlayAudioCommand<'a>) -> Self {
         PlayAudioSettings {
+            instance_handle: command.instance_handle.clone(),
+            source: command.source.clone(),
+            settings: command.settings.clone(),
+        }
+    }
+}
+
+impl<'a> From<&mut PlayAudioStreamingCommand<'a>> for PlayAudioStreamingSettings {
+    fn from(command: &mut PlayAudioStreamingCommand<'a>) -> Self {
+        Self {
             instance_handle: command.instance_handle.clone(),
             source: command.source.clone(),
             settings: command.settings.clone(),
