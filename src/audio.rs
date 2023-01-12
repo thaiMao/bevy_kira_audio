@@ -141,6 +141,36 @@ impl PartialSoundSettings {
             });
         }
     }
+
+    pub(crate) fn apply_stream(&self, sound: &mut StreamingSoundData) {
+        if let Some(loop_behavior) = self.loop_behavior {
+            if let Some(start_position) = loop_behavior {
+                sound.settings.loop_behavior = Some(LoopBehavior { start_position })
+            } else {
+                sound.settings.loop_behavior = None;
+            }
+        }
+
+        if let Some(volume) = self.volume {
+            sound.settings.volume = volume.into();
+        }
+        if let Some(playback_rate) = self.playback_rate {
+            sound.settings.playback_rate = playback_rate.into();
+        }
+        if let Some(start_position) = self.start_position {
+            sound.settings.start_position = start_position;
+        }
+        if let Some(panning) = self.panning {
+            sound.settings.panning = panning;
+        }
+        if let Some(AudioTween { duration, easing }) = self.fade_in {
+            sound.settings.fade_in_tween = Some(kira::tween::Tween {
+                duration,
+                easing,
+                ..default()
+            });
+        }
+    }
 }
 
 pub struct PlayAudioSettings {
