@@ -1,6 +1,7 @@
 use crate::{AudioTween, PlaybackState};
 use bevy::asset::{Assets, Handle};
 use kira::sound::static_sound::StaticSoundHandle;
+use kira::sound::streaming::StreamingSoundHandle;
 use kira::CommandError;
 use thiserror::Error;
 
@@ -9,6 +10,12 @@ use thiserror::Error;
 /// Asset for direct audio control
 pub struct AudioInstance {
     pub(crate) handle: StaticSoundHandle,
+}
+
+#[derive(bevy::reflect::TypeUuid)]
+#[uuid = "d5db4c4c-a797-4035-9b8a-a68c1b409349"]
+pub struct AudioStreamingInstance {
+    pub(crate) handle: StreamingSoundHandle<Error>,
 }
 
 /// Errors that can occur when directly controlling audio
