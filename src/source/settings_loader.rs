@@ -4,11 +4,15 @@ use std::{io::Cursor, path::PathBuf};
 use bevy::asset::{AssetLoader, LoadContext, LoadedAsset};
 use bevy::utils::BoxedFuture;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings};
+use kira::sound::streaming::{StreamingSoundData, StreamingSoundSettings};
+use kira::track::TrackId;
+use kira::StartTime;
+
 use kira::tween::Tween;
 use kira::{LoopBehavior, PlaybackRate, Volume};
 use serde::Deserialize;
 
-use crate::AudioSource;
+use crate::{AudioSource, AudioStreamingSource};
 
 #[derive(Default)]
 pub struct SettingsLoader;
@@ -107,6 +111,73 @@ impl AssetLoader for SettingsLoader {
                 StaticSoundData::from_cursor(Cursor::new(sound_bytes), sound_settings.into())?;
 
             load_context.set_default_asset(LoadedAsset::new(AudioSource { sound }));
+
+            Ok(())
+        })
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &[
+            #[cfg(feature = "mp3")]
+            "mp3.ron",
+            #[cfg(feature = "wav")]
+            "wav.ron",
+            #[cfg(feature = "flac")]
+            "flac.ron",
+            #[cfg(feature = "ogg")]
+            "ogg.ron",
+            #[cfg(feature = "ogg")]
+            "oga.ron",
+            #[cfg(feature = "ogg")]
+            "spx.ron",
+        ]
+    }
+}
+
+#[derive(Default)]
+pub struct StreamingSettingsLoader;
+
+impl From<SoundSettings> for StreamingSoundSettings {
+    fn from(settings: SoundSettings) -> Self {
+        let mut streaming_sound_settings = StreamingSoundSettings::new();
+
+        stream_sound_settings.start_time = StartTime::Immediate;
+        stream_sound_settings.track = TrackId::Main;
+
+        stream_sound_settings.start_position = settings.start_position;
+        stream_sound_settings.volume = Volume::from(settings.volume);
+        stream_sound_settings.playback_rate = PlaybackRate::from(settings.playback_rate);
+        stream_sound_settings.panning = settings.panning;
+        stream_sound_settings.loop_behavior = settings
+            .loop_behavior
+            .map(|start_position| LoopBehavior { start_position });
+        stream_sound_settings.fade_in_tween = settings.fade_in_tween.map(|micros| Tween {
+            duration: Duration::from_micros(micros),
+            ..Default::default()
+        });
+
+        stream_sound_settings
+    }
+}
+
+impl AssetLoader for StreamingSettingsLoader {
+    fn load<'a>(
+        &'a self,
+        bytes: &'a [u8],
+        load_context: &'a mut LoadContext,
+    ) -> BoxedFuture<'a, Result<(), anyhow::Error>> {
+        Box::pin(async move {
+            let streaming_sound_settings: StreamingSoundSettings = ron::de::from_bytes(bytes)?;
+            let sound_bytes = load_context
+                .read_asset_bytes(&streaming_sound_settings.file)
+                .await?;
+
+            let sound = StreamingSoundData::from_cursor(
+                Cursor::new(sound_bytes),
+                streaming_sound_settings.into(),
+            )?;
+
+            load_context.set_default_asset(LoadedAsset::new(AudioStreamingSource { sound }));
 
             Ok(())
         })
