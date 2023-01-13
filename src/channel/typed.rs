@@ -1,10 +1,12 @@
 use crate::audio::{
-    AudioCommand, FadeIn, FadeOut, PlayAudioCommand, PlayAudioSettings, TweenCommand,
-    TweenCommandKind,
+    AudioCommand, AudioStreamingCommand, FadeIn, FadeOut, PlayAudioCommand, PlayAudioSettings,
+    PlayAudioStreamingCommand, PlayAudioStreamingSettings, TweenCommand, TweenCommandKind,
 };
-use crate::channel::AudioCommandQue;
+use crate::channel::{AudioCommandQue, AudioStreamingCommandQue};
 use crate::instance::AudioInstance;
-use crate::{AudioControl, AudioSource, PlaybackState};
+use crate::{
+    AudioControl, AudioSource, AudioStreamingControl, AudioStreamingSource, PlaybackState,
+};
 use bevy::asset::{Handle, HandleId};
 use bevy::ecs::system::Resource;
 use bevy::utils::HashMap;
@@ -244,5 +246,180 @@ mod test {
             PlaybackState::Playing { position: 42. },
         );
         assert!(audio.is_playing_sound());
+    }
+}
+
+/// Channel to play and control audio
+///
+/// Add your own channels via [`add_audio_channel`](AudioApp::add_audio_channel).
+/// By default, there is only the [`AudioChannel<MainTrack>`](crate::Audio) channel.
+#[derive(Resource)]
+pub struct AudioStreamingChannel<T> {
+    pub(crate) commands: RwLock<VecDeque<AudioStreamingCommand>>,
+    pub(crate) states: HashMap<HandleId, PlaybackState>,
+    _marker: PhantomData<T>,
+}
+
+impl<T> Default for AudioStreamingChannel<T> {
+    fn default() -> Self {
+        AudioStreamingChannel::<T> {
+            commands: Default::default(),
+            states: Default::default(),
+            _marker: PhantomData::default(),
+        }
+    }
+}
+
+impl<T> AudioStreamingCommandQue for AudioStreamingChannel<T> {
+    fn que(&self, command: AudioStreamingCommand) {
+        self.commands.write().push_front(command)
+    }
+}
+
+impl<T> AudioStreamingControl for AudioStreamingChannel<T> {
+    /// Play audio
+    ///
+    /// ```
+    /// # use bevy::prelude::*;
+    /// # use bevy_kira_audio::prelude::*;
+    ///
+    /// fn my_system(asset_server: Res<AssetServer>, audio: Res<Audio>) {
+    ///     audio.play(asset_server.load("audio.mp3"));
+    /// }
+    /// ```
+    fn play(
+        &self,
+        audio_streaming_source: Handle<AudioStreamingSource>,
+    ) -> PlayAudioStreamingCommand {
+        PlayAudioStreamingCommand::new(audio_streaming_source, self)
+    }
+
+    /// Stop all audio
+    ///
+    /// ```
+    /// # use bevy::prelude::*;
+    /// # use bevy_kira_audio::prelude::*;
+    ///
+    /// fn my_system(audio: Res<Audio>) {
+    ///     audio.stop();
+    /// }
+    /// ```
+    fn stop(&self) -> TweenCommand<FadeOut> {
+        TweenCommand::new(TweenCommandKind::Stop, self)
+    }
+
+    /// Pause all audio
+    ///
+    /// ```
+    /// # use bevy::prelude::*;
+    /// # use bevy_kira_audio::prelude::*;
+    ///
+    /// fn my_system(audio: Res<Audio>) {
+    ///     audio.pause();
+    /// }
+    /// ```
+    fn pause(&self) -> TweenCommand<FadeOut> {
+        TweenCommand::new(TweenCommandKind::Pause, self)
+    }
+
+    /// Resume all audio
+    ///
+    /// ```
+    /// # use bevy::prelude::*;
+    /// # use bevy_kira_audio::prelude::*;
+    ///
+    /// fn my_system(audio: Res<Audio>) {
+    ///     audio.resume();
+    /// }
+    /// ```
+    fn resume(&self) -> TweenCommand<FadeIn> {
+        TweenCommand::new(TweenCommandKind::Resume, self)
+    }
+
+    /// Set the volume
+    ///
+    /// The default value is 1.
+    ///
+    /// ```
+    /// # use bevy::prelude::*;
+    /// # use bevy_kira_audio::prelude::*;
+    ///
+    /// fn my_system(audio: Res<Audio>) {
+    ///     audio.set_volume(0.5);
+    /// }
+    /// ```
+    fn set_volume(&self, volume: f64) -> TweenCommand<FadeIn> {
+        TweenCommand::new(TweenCommandKind::SetVolume(volume), self)
+    }
+
+    /// Set panning
+    ///
+    /// The default value is 0.5
+    /// Values up to 1 pan to the right
+    /// Values down to 0 pan to the left
+    ///
+    /// ```
+    /// # use bevy::prelude::*;
+    /// # use bevy_kira_audio::prelude::*;
+    ///
+    /// fn my_system(audio: Res<Audio>) {
+    ///     audio.set_panning(0.9);
+    /// }
+    /// ```
+    fn set_panning(&self, panning: f64) -> TweenCommand<FadeIn> {
+        TweenCommand::new(TweenCommandKind::SetPanning(panning), self)
+    }
+
+    /// Set playback rate
+    ///
+    /// The default value is 1
+    ///
+    /// ```
+    /// # use bevy::prelude::*;
+    /// # use bevy_kira_audio::prelude::*;
+    ///
+    /// fn my_system(audio: Res<Audio>) {
+    ///     audio.set_playback_rate(2.0);
+    /// }
+    /// ```
+    fn set_playback_rate(&self, playback_rate: f64) -> TweenCommand<FadeIn> {
+        TweenCommand::new(TweenCommandKind::SetPlaybackRate(playback_rate), self)
+    }
+
+    /// Get state for a playback instance.
+    fn state(&self, instance_handle: &Handle<AudioStreamingInstance>) -> PlaybackState {
+        self.states
+            .get(&instance_handle.id())
+            .cloned()
+            .unwrap_or_else(|| {
+                self.commands
+                    .read()
+                    .iter()
+                    .find(|command| match command {
+                        AudioStreamingCommand::Play(PlayAudioStreamingSettings {
+                            instance_handle: handle,
+                            settings: _,
+                            source: _,
+                        }) => handle.id() == instance_handle.id(),
+                        _ => false,
+                    })
+                    .map(|_| PlaybackState::Queued)
+                    .unwrap_or(PlaybackState::Stopped)
+            })
+    }
+
+    /// Returns `true` if there is any sound in this channel that is in the state `Playing`, `Pausing`, or `Stopping`
+    ///
+    /// If there are only `Stopped`, `Paused`, or `Queued` sounds, the method will return `false`.
+    /// The same result is returned if there are no sounds in the channel at all.
+    fn is_playing_sound(&self) -> bool {
+        self.states
+            .iter()
+            .fold(false, |playing, (_, state)| match state {
+                PlaybackState::Playing { .. }
+                | PlaybackState::Pausing { .. }
+                | PlaybackState::Stopping { .. } => true,
+                _ => playing,
+            })
     }
 }
