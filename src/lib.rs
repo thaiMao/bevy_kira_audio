@@ -46,8 +46,8 @@ pub use audio::{
     TweenCommand,
 };
 pub use backend_settings::AudioSettings;
-pub use channel::AudioControl;
-pub use source::AudioSource;
+pub use channel::{AudioControl, AudioStreamingControl};
+pub use source::{AudioSource, AudioStreamingSource};
 
 /// Most commonly used types
 pub mod prelude {
